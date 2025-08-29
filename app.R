@@ -1,5 +1,16 @@
 library(shiny)
 library(shinydashboard)
+library(ggplot2)
+library(dplyr)
+
+# Source the data cleaning script to load and process the data
+source("data_clean.r")
+
+# Compute unique years for AMI eligible cases
+unique_years_ami <- sort(unique(data$edateyr[data$redcap_event_name == "heart_arm_2" & data$cstatus == 1 & !is.na(data$edateyr)]))
+
+# Compute unique years for Stroke eligible cases
+unique_years_stroke <- sort(unique(data$edateyr[data$redcap_event_name == "stroke_arm_1" & data$cstatus == 1 & !is.na(data$edateyr)]))
 
 ui <- dashboardPage(
   skin = "red", 
@@ -70,7 +81,7 @@ ui <- dashboardPage(
               fluidRow(
                 box(width = 12, 
                     h2(strong("Barbados National Registry: Acute Myocardial Infarction & Stroke Dashboard")),
-                    p("Welcome to the official dashboard for the Barbados National Registry, dedicated to providing a clear and comprehensive view of cardiovascular health data. This platform serves as a vital resource for healthcare professionals, researchers, and policymakers, offering critical insights into the prevalence and outcomes of acute myocardial infarction (AMI) and stroke across the island."),
+                    p("Welcome to the CVD dashboard for the Barbados National Registry, dedicated to providing a clear and comprehensive view of cardiovascular health data in Barbados. This platform serves as a vital resource for healthcare professionals, researchers, and policymakers, offering critical insights into the prevalence and outcomes of acute myocardial infarction (AMI) and stroke across the island."),
                     p("Our mission is to translate complex data into actionable information, empowering the public health community to make informed decisions that improve patient care and health outcomes. By tracking key metrics in real-time, we aim to support strategic planning and interventions for these leading causes of mortality and disability."),
                     h3("Key Insights and Data"),
                     p("This dashboard provides a detailed analysis of AMI and stroke events from 2023 to 2025, broken down by year and month. You can explore a variety of data points, including:"),
@@ -79,7 +90,7 @@ ui <- dashboardPage(
                       tags$li(strong("Mortality Data:"), " Comprehensive records on deaths attributable to AMI and stroke, offering a crucial perspective on the severity and impact of these conditions."),
                       tags$li(strong("Proportion Receiving Aspirin Acutely:"), " An essential metric tracking the percentage of patients who received aspirin shortly after an AMI or stroke event. This data is critical for evaluating the timeliness and effectiveness of initial patient management protocols.")
                     ),
-                    p("We invite you to navigate through the different sections of the dashboard to explore the data. This information is a cornerstone for continuous quality improvement initiatives and the development of targeted public health campaigns."),
+                    p("We invite you to navigate through the different sections of the dashboard to explore the data. This information is one of the cornerstone for continuous quality improvement initiatives and the development of targeted public health campaigns in Barbados."),
                     p("The data presented here is an estimated representation of real-world outcomes and is subject to updates as more information is compiled. We are committed to maintaining the highest level of accuracy and transparency in our reporting.")
                 )
               )
@@ -87,19 +98,499 @@ ui <- dashboardPage(
       # AMI Page
       tabItem(tabName = "ami",
               h2("Acute Myocardial Infarction (AMI) Data"),
-              p("This section provides detailed data and insights related to AMI cases in Barbados.")
+              p("This section provides detailed data and insights related to AMI cases in Barbados."),
+              fluidRow(
+                box(width = 6,
+                    plotOutput("ami_bar_chart")
+                ),
+                box(width = 6,
+                    plotOutput("ami_deaths_bar_chart")
+                )
+              ),
+              fluidRow(
+                column(6,
+                       selectInput("year_select_ami", "Select Year:",
+                                   choices = c("All years" = "All", as.character(unique_years_ami)))
+                ),
+                column(6,
+                       selectInput("sex_select_ami", "Select Sex:",
+                                   choices = c("Both" = "Both", "Female" = "Female", "Male" = "Male"))
+                )
+              ),
+              fluidRow(
+                valueBoxOutput("total_mi_deaths"),
+                valueBoxOutput("total_abstracted_mi_cases"),
+                valueBoxOutput("case_fatality_rate_mi"),
+                valueBoxOutput("total_receiving_aspirin_mi"),
+                valueBoxOutput("proportion_receiving_aspirin_mi")
+              ),
+              fluidRow(
+                box(width = 6,
+                    plotOutput("ami_cases_by_month")
+                ),
+                box(width = 6,
+                    plotOutput("ami_deaths_by_month")
+                )
+              ),
+              fluidRow(
+                box(width = 6,
+                    plotOutput("ami_aspirin_by_month")
+                )
+              )
       ),
       # Stroke Page
       tabItem(tabName = "stroke",
               h2("Stroke Data"),
-              p("This section provides detailed data and insights related to stroke cases in Barbados.")
+              p("This section provides detailed data and insights related to stroke cases in Barbados."),
+              fluidRow(
+                box(width = 6,
+                    plotOutput("stroke_bar_chart")
+                ),
+                box(width = 6,
+                    plotOutput("stroke_deaths_bar_chart")
+                )
+              ),
+              fluidRow(
+                column(6,
+                       selectInput("year_select_stroke", "Select Year:",
+                                   choices = c("All years" = "All", as.character(unique_years_stroke)))
+                ),
+                column(6,
+                       selectInput("sex_select_stroke", "Select Sex:",
+                                   choices = c("Both" = "Both", "Female" = "Female", "Male" = "Male"))
+                )
+              ),
+              fluidRow(
+                valueBoxOutput("total_stroke_deaths"),
+                valueBoxOutput("total_abstracted_stroke_cases"),
+                valueBoxOutput("case_fatality_rate_stroke"),
+                valueBoxOutput("total_receiving_aspirin_stroke"),
+                valueBoxOutput("proportion_receiving_aspirin_stroke")
+              ),
+              fluidRow(
+                box(width = 6,
+                    plotOutput("stroke_cases_by_month")
+                ),
+                box(width = 6,
+                    plotOutput("stroke_deaths_by_month")
+                )
+              ),
+              fluidRow(
+                box(width = 6,
+                    plotOutput("stroke_aspirin_by_month")
+                )
+              )
       )
     )
   )
 )
 
 server <- function(input, output) {
-  # Server logic can be added here for dynamic content
+  # Reactive filtered data for AMI
+  filtered_data_ami <- reactive({
+    ami_filtered <- data[data$redcap_event_name == "heart_arm_2" & data$cstatus == 1, ]
+    
+    if (input$year_select_ami != "All") {
+      ami_filtered <- ami_filtered[ami_filtered$edateyr == as.numeric(input$year_select_ami), ]
+    }
+    
+    if (input$sex_select_ami != "Both") {
+      sex_val <- ifelse(input$sex_select_ami == "Female", 1, 2)
+      ami_filtered <- ami_filtered[ami_filtered$sex == sex_val, ]
+    }
+    
+    ami_filtered
+  })
+  
+  # Reactive filtered data for Stroke
+  filtered_data_stroke <- reactive({
+    stroke_filtered <- data[data$redcap_event_name == "stroke_arm_1" & data$cstatus == 1, ]
+    
+    if (input$year_select_stroke != "All") {
+      stroke_filtered <- stroke_filtered[stroke_filtered$edateyr == as.numeric(input$year_select_stroke), ]
+    }
+    
+    if (input$sex_select_stroke != "Both") {
+      sex_val <- ifelse(input$sex_select_stroke == "Female", 1, 2)
+      stroke_filtered <- stroke_filtered[stroke_filtered$sex == sex_val, ]
+    }
+    
+    stroke_filtered
+  })
+  
+  # Calculate totals for AMI value boxes
+  total_mi_deaths <- reactive({
+    sum(filtered_data_ami()$vstatus == 2, na.rm = TRUE)
+  })
+  
+  total_abstracted_mi_cases <- reactive({
+    nrow(filtered_data_ami())
+  })
+  
+  case_fatality_rate_mi <- reactive({
+    total_deaths <- total_mi_deaths()
+    total_cases <- total_abstracted_mi_cases()
+    if (total_cases > 0) {
+      (total_deaths / total_cases) * 100
+    } else {
+      0
+    }
+  })
+  
+  total_receiving_aspirin_mi <- reactive({
+    sum(filtered_data_ami()$asp___1 == 1, na.rm = TRUE)
+  })
+  
+  proportion_receiving_aspirin_mi <- reactive({
+    total_aspirin <- total_receiving_aspirin_mi()
+    total_cases <- total_abstracted_mi_cases()
+    if (total_cases > 0) {
+      (total_aspirin / total_cases) * 100
+    } else {
+      0
+    }
+  })
+  
+  # Calculate totals for Stroke value boxes
+  total_stroke_deaths <- reactive({
+    sum(filtered_data_stroke()$vstatus == 2, na.rm = TRUE)
+  })
+  
+  total_abstracted_stroke_cases <- reactive({
+    nrow(filtered_data_stroke())
+  })
+  
+  case_fatality_rate_stroke <- reactive({
+    total_deaths <- total_stroke_deaths()
+    total_cases <- total_abstracted_stroke_cases()
+    if (total_cases > 0) {
+      (total_deaths / total_cases) * 100
+    } else {
+      0
+    }
+  })
+  
+  total_receiving_aspirin_stroke <- reactive({
+    sum(filtered_data_stroke()$asp___1 == 1, na.rm = TRUE)
+  })
+  
+  proportion_receiving_aspirin_stroke <- reactive({
+    total_aspirin <- total_receiving_aspirin_stroke()
+    total_cases <- total_abstracted_stroke_cases()
+    if (total_cases > 0) {
+      (total_aspirin / total_cases) * 100
+    } else {
+      0
+    }
+  })
+  
+  # Server logic for AMI cases bar chart
+  output$ami_bar_chart <- renderPlot({
+    ami_data <- data[data$redcap_event_name == "heart_arm_2" & data$cstatus == 1, ]
+    
+    ami_data$year <- ami_data$edateyr
+    
+    ami_data <- ami_data[!is.na(ami_data$year), ]
+    
+    year_counts <- aggregate(recid ~ year, data = ami_data, FUN = length)
+    colnames(year_counts)[2] <- "count"
+    
+    ggplot(year_counts, aes(x = as.factor(year), y = count)) +
+      geom_bar(stat = "identity", fill = "steelblue") +
+      labs(title = "Number of Eligible AMI Cases by Year",
+           x = "Year",
+           y = "Number of Cases") +
+      theme_minimal()
+  })
+  
+  # Server logic for AMI deaths bar chart
+  output$ami_deaths_bar_chart <- renderPlot({
+    ami_deaths_data <- data[data$redcap_event_name == "heart_arm_2" & data$cstatus == 1 & data$vstatus == 2, ]
+    
+    ami_deaths_data$year <- ami_deaths_data$edateyr
+    
+    ami_deaths_data <- ami_deaths_data[!is.na(ami_deaths_data$year), ]
+    
+    deaths_counts <- aggregate(recid ~ year, data = ami_deaths_data, FUN = length)
+    colnames(deaths_counts)[2] <- "count"
+    
+    ggplot(deaths_counts, aes(x = as.factor(year), y = count)) +
+      geom_bar(stat = "identity", fill = "darkred") +
+      labs(title = "Number of AMI Deaths by Year",
+           x = "Year",
+           y = "Number of Deaths") +
+      theme_minimal()
+  })
+  
+  # Server logic for AMI cases by month bar chart
+  output$ami_cases_by_month <- renderPlot({
+    df <- filtered_data_ami() %>%
+      group_by(edatemon) %>%
+      summarise(count = n()) %>%
+      filter(!is.na(edatemon))
+    
+    if (nrow(df) == 0) {
+      return(NULL)  # No data to plot
+    }
+    
+    df$month <- factor(df$edatemon, levels = 1:12, labels = month.name)
+    
+    ggplot(df, aes(x = month, y = count)) +
+      geom_bar(stat = "identity", fill = "steelblue") +
+      labs(title = "AMI Cases by Month",
+           x = "Month",
+           y = "Frequency") +
+      theme_minimal() +
+      theme(axis.text.x = element_text(angle = 45, hjust = 1))
+  })
+  
+  # Server logic for AMI deaths by month bar chart
+  output$ami_deaths_by_month <- renderPlot({
+    df <- filtered_data_ami() %>%
+      group_by(edatemon) %>%
+      summarise(count = sum(vstatus == 2, na.rm = TRUE)) %>%
+      filter(!is.na(edatemon))
+    
+    if (nrow(df) == 0) {
+      return(NULL)  # No data to plot
+    }
+    
+    df$month <- factor(df$edatemon, levels = 1:12, labels = month.name)
+    
+    ggplot(df, aes(x = month, y = count)) +
+      geom_bar(stat = "identity", fill = "darkred") +
+      labs(title = "AMI Deaths by Month",
+           x = "Month",
+           y = "Frequency") +
+      theme_minimal() +
+      theme(axis.text.x = element_text(angle = 45, hjust = 1))
+  })
+  
+  # Server logic for AMI aspirin by month bar chart
+  output$ami_aspirin_by_month <- renderPlot({
+    df <- filtered_data_ami() %>%
+      group_by(edatemon) %>%
+      summarise(count = sum(asp___1 == 1, na.rm = TRUE)) %>%
+      filter(!is.na(edatemon))
+    
+    if (nrow(df) == 0) {
+      return(NULL)  # No data to plot
+    }
+    
+    df$month <- factor(df$edatemon, levels = 1:12, labels = month.name)
+    
+    ggplot(df, aes(x = month, y = count)) +
+      geom_bar(stat = "identity", fill = "green") +
+      labs(title = "Persons on Aspirin by Month",
+           x = "Month",
+           y = "Frequency") +
+      theme_minimal() +
+      theme(axis.text.x = element_text(angle = 45, hjust = 1))
+  })
+  
+  # Server logic for Stroke cases bar chart
+  output$stroke_bar_chart <- renderPlot({
+    stroke_data <- data[data$redcap_event_name == "stroke_arm_1" & data$cstatus == 1, ]
+    
+    stroke_data$year <- stroke_data$edateyr
+    
+    stroke_data <- stroke_data[!is.na(stroke_data$year), ]
+    
+    year_counts <- aggregate(recid ~ year, data = stroke_data, FUN = length)
+    colnames(year_counts)[2] <- "count"
+    
+    ggplot(year_counts, aes(x = as.factor(year), y = count)) +
+      geom_bar(stat = "identity", fill = "steelblue") +
+      labs(title = "Number of Eligible Stroke Cases by Year",
+           x = "Year",
+           y = "Number of Cases") +
+      theme_minimal()
+  })
+  
+  # Server logic for Stroke deaths bar chart
+  output$stroke_deaths_bar_chart <- renderPlot({
+    stroke_deaths_data <- data[data$redcap_event_name == "stroke_arm_1" & data$cstatus == 1 & data$vstatus == 2, ]
+    
+    stroke_deaths_data$year <- stroke_deaths_data$edateyr
+    
+    stroke_deaths_data <- stroke_deaths_data[!is.na(stroke_deaths_data$year), ]
+    
+    deaths_counts <- aggregate(recid ~ year, data = stroke_deaths_data, FUN = length)
+    colnames(deaths_counts)[2] <- "count"
+    
+    ggplot(deaths_counts, aes(x = as.factor(year), y = count)) +
+      geom_bar(stat = "identity", fill = "darkred") +
+      labs(title = "Number of Stroke Deaths by Year",
+           x = "Year",
+           y = "Number of Deaths") +
+      theme_minimal()
+  })
+  
+  # Server logic for Stroke cases by month bar chart
+  output$stroke_cases_by_month <- renderPlot({
+    df <- filtered_data_stroke() %>%
+      group_by(edatemon) %>%
+      summarise(count = n()) %>%
+      filter(!is.na(edatemon))
+    
+    if (nrow(df) == 0) {
+      return(NULL)  # No data to plot
+    }
+    
+    df$month <- factor(df$edatemon, levels = 1:12, labels = month.name)
+    
+    ggplot(df, aes(x = month, y = count)) +
+      geom_bar(stat = "identity", fill = "steelblue") +
+      labs(title = "Stroke Cases by Month",
+           x = "Month",
+           y = "Frequency") +
+      theme_minimal() +
+      theme(axis.text.x = element_text(angle = 45, hjust = 1))
+  })
+  
+  # Server logic for Stroke deaths by month bar chart
+  output$stroke_deaths_by_month <- renderPlot({
+    df <- filtered_data_stroke() %>%
+      group_by(edatemon) %>%
+      summarise(count = sum(vstatus == 2, na.rm = TRUE)) %>%
+      filter(!is.na(edatemon))
+    
+    if (nrow(df) == 0) {
+      return(NULL)  # No data to plot
+    }
+    
+    df$month <- factor(df$edatemon, levels = 1:12, labels = month.name)
+    
+    ggplot(df, aes(x = month, y = count)) +
+      geom_bar(stat = "identity", fill = "darkred") +
+      labs(title = "Stroke Deaths by Month",
+           x = "Month",
+           y = "Frequency") +
+      theme_minimal() +
+      theme(axis.text.x = element_text(angle = 45, hjust = 1))
+  })
+  
+  # Server logic for Stroke aspirin by month bar chart
+  output$stroke_aspirin_by_month <- renderPlot({
+    df <- filtered_data_stroke() %>%
+      group_by(edatemon) %>%
+      summarise(count = sum(asp___1 == 1, na.rm = TRUE)) %>%
+      filter(!is.na(edatemon))
+    
+    if (nrow(df) == 0) {
+      return(NULL)  # No data to plot
+    }
+    
+    df$month <- factor(df$edatemon, levels = 1:12, labels = month.name)
+    
+    ggplot(df, aes(x = month, y = count)) +
+      geom_bar(stat = "identity", fill = "green") +
+      labs(title = "Persons on Aspirin by Month",
+           x = "Month",
+           y = "Frequency") +
+      theme_minimal() +
+      theme(axis.text.x = element_text(angle = 45, hjust = 1))
+  })
+  
+  # Value box for total MI deaths
+  output$total_mi_deaths <- renderValueBox({
+    valueBox(
+      value = total_mi_deaths(),
+      subtitle = "Total Number of MI Deaths",
+      color = "red",
+      icon = icon("heart-broken")
+    )
+  })
+  
+  # Value box for total abstracted MI cases
+  output$total_abstracted_mi_cases <- renderValueBox({
+    valueBox(
+      value = total_abstracted_mi_cases(),
+      subtitle = "Total Number of Abstracted MI Cases",
+      color = "blue",
+      icon = icon("notes-medical")
+    )
+  })
+  
+  # Value box for case fatality rate MI
+  output$case_fatality_rate_mi <- renderValueBox({
+    valueBox(
+      value = sprintf("%.2f%%", case_fatality_rate_mi()),
+      subtitle = "Case Fatality Rate",
+      color = "yellow",
+      icon = icon("percentage")
+    )
+  })
+  
+  # Value box for total receiving aspirin MI
+  output$total_receiving_aspirin_mi <- renderValueBox({
+    valueBox(
+      value = total_receiving_aspirin_mi(),
+      subtitle = "Total Receiving Aspirin Acutely",
+      color = "green",
+      icon = icon("pills")
+    )
+  })
+  
+  # Value box for proportion receiving aspirin MI
+  output$proportion_receiving_aspirin_mi <- renderValueBox({
+    valueBox(
+      value = sprintf("%.2f%%", proportion_receiving_aspirin_mi()),
+      subtitle = "Proportion Receiving Aspirin",
+      color = "purple",
+      icon = icon("percentage")
+    )
+  })
+  
+  # Value box for total stroke deaths
+  output$total_stroke_deaths <- renderValueBox({
+    valueBox(
+      value = total_stroke_deaths(),
+      subtitle = "Total Number of Stroke Deaths",
+      color = "red",
+      icon = icon("heart-broken")
+    )
+  })
+  
+  # Value box for total abstracted stroke cases
+  output$total_abstracted_stroke_cases <- renderValueBox({
+    valueBox(
+      value = total_abstracted_stroke_cases(),
+      subtitle = "Total Number of Abstracted Stroke Cases",
+      color = "blue",
+      icon = icon("notes-medical")
+    )
+  })
+  
+  # Value box for case fatality rate stroke
+  output$case_fatality_rate_stroke <- renderValueBox({
+    valueBox(
+      value = sprintf("%.2f%%", case_fatality_rate_stroke()),
+      subtitle = "Case Fatality Rate",
+      color = "yellow",
+      icon = icon("percentage")
+    )
+  })
+  
+  # Value box for total receiving aspirin stroke
+  output$total_receiving_aspirin_stroke <- renderValueBox({
+    valueBox(
+      value = total_receiving_aspirin_stroke(),
+      subtitle = "Total Receiving Aspirin Acutely",
+      color = "green",
+      icon = icon("pills")
+    )
+  })
+  
+  # Value box for proportion receiving aspirin stroke
+  output$proportion_receiving_aspirin_stroke <- renderValueBox({
+    valueBox(
+      value = sprintf("%.2f%%", proportion_receiving_aspirin_stroke()),
+      subtitle = "Proportion Receiving Aspirin",
+      color = "purple",
+      icon = icon("percentage")
+    )
+  })
 }
 
 shinyApp(ui, server)
