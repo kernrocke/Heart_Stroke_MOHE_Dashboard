@@ -2,15 +2,40 @@ library(shiny)
 library(shinydashboard)
 library(ggplot2)
 library(dplyr)
+library(REDCapR)
 
-# Source the data cleaning script to load and process the data
-source("data_clean.r")
+# REDCap API configuration with fallback values
+redcap_url <- Sys.getenv("REDCAP_URL", unset = "https://caribdata.org/redcap/api/")
+api_token <- Sys.getenv("REDCAP_API_TOKEN", unset = "208D71C79CC544CC61E178CE4E4F918C")
+
+# Function to fetch data from REDCap API with error handling
+fetch_redcap_data <- function(url, token) {
+  tryCatch({
+    result <- REDCapR::redcap_read(
+      redcap_uri = url,
+      token = token,
+      verbose = TRUE
+    )$data
+    return(result)
+  }, error = function(e) {
+    stop("Error fetching data from REDCap: ", e$message)
+  })
+}
+
+# Fetch data at startup
+cat("Fetching data from REDCap...\n")
+data <- fetch_redcap_data(redcap_url, api_token)
+cat("Data fetched successfully. Rows:", nrow(data), "\n")
 
 # Compute unique years for AMI eligible cases
+cat("Computing unique years for AMI...\n")
 unique_years_ami <- sort(unique(data$edateyr[data$redcap_event_name == "heart_arm_2" & data$cstatus == 1 & !is.na(data$edateyr)]))
+cat("Unique AMI years:", unique_years_ami, "\n")
 
 # Compute unique years for Stroke eligible cases
+cat("Computing unique years for Stroke...\n")
 unique_years_stroke <- sort(unique(data$edateyr[data$redcap_event_name == "stroke_arm_1" & data$cstatus == 1 & !is.na(data$edateyr)]))
+cat("Unique Stroke years:", unique_years_stroke, "\n")
 
 ui <- dashboardPage(
   skin = "red", 
@@ -296,11 +321,16 @@ server <- function(input, output) {
     colnames(year_counts)[2] <- "count"
     
     ggplot(year_counts, aes(x = as.factor(year), y = count)) +
-      geom_bar(stat = "identity", fill = "steelblue") +
+      geom_bar(stat = "identity", fill = "#08589e") +
+      geom_text(aes(label = count, y = count * 1.01), vjust = -0.5, size = 5) +
       labs(title = "Number of Eligible AMI Cases by Year",
            x = "Year",
            y = "Number of Cases") +
-      theme_minimal()
+      theme_minimal() +
+      theme(axis.text.x = element_text(hjust = 1, size = 12), 
+            axis.text.y = element_text(size = 12),
+            axis.title.x = element_text(size = 14),
+            axis.title.y = element_text(size = 14))
   })
   
   # Server logic for AMI deaths bar chart
@@ -316,10 +346,15 @@ server <- function(input, output) {
     
     ggplot(deaths_counts, aes(x = as.factor(year), y = count)) +
       geom_bar(stat = "identity", fill = "darkred") +
+      geom_text(aes(label = count, y = count * 1.01), vjust = -0.5, size = 5) +
       labs(title = "Number of AMI Deaths by Year",
            x = "Year",
            y = "Number of Deaths") +
-      theme_minimal()
+      theme_minimal() +
+      theme(axis.text.x = element_text(hjust = 1, size = 12), 
+            axis.text.y = element_text(size = 12),
+            axis.title.x = element_text(size = 14),
+            axis.title.y = element_text(size = 14))
   })
   
   # Server logic for AMI cases by month bar chart
@@ -336,12 +371,16 @@ server <- function(input, output) {
     df$month <- factor(df$edatemon, levels = 1:12, labels = month.name)
     
     ggplot(df, aes(x = month, y = count)) +
-      geom_bar(stat = "identity", fill = "steelblue") +
+      geom_bar(stat = "identity", fill = "#08589e") +
+      geom_text(aes(label = count, y = count * 1.01), vjust = -0.5, size = 5) +
       labs(title = "AMI Cases by Month",
            x = "Month",
            y = "Frequency") +
       theme_minimal() +
-      theme(axis.text.x = element_text(angle = 45, hjust = 1))
+      theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 12), 
+            axis.text.y = element_text(size = 12),
+            axis.title.x = element_text(size = 14),
+            axis.title.y = element_text(size = 14))
   })
   
   # Server logic for AMI deaths by month bar chart
@@ -359,11 +398,15 @@ server <- function(input, output) {
     
     ggplot(df, aes(x = month, y = count)) +
       geom_bar(stat = "identity", fill = "darkred") +
+      geom_text(aes(label = count, y = count * 1.01), vjust = -0.5, size = 5) +
       labs(title = "AMI Deaths by Month",
            x = "Month",
            y = "Frequency") +
       theme_minimal() +
-      theme(axis.text.x = element_text(angle = 45, hjust = 1))
+      theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 12), 
+            axis.text.y = element_text(size = 12),
+            axis.title.x = element_text(size = 14),
+            axis.title.y = element_text(size = 14))
   })
   
   # Server logic for AMI aspirin by month bar chart
@@ -380,12 +423,16 @@ server <- function(input, output) {
     df$month <- factor(df$edatemon, levels = 1:12, labels = month.name)
     
     ggplot(df, aes(x = month, y = count)) +
-      geom_bar(stat = "identity", fill = "green") +
+      geom_bar(stat = "identity", fill = "#238b45") +
+      geom_text(aes(label = count, y = count * 1.01), vjust = -0.5, size = 5) +
       labs(title = "Persons on Aspirin by Month",
            x = "Month",
            y = "Frequency") +
       theme_minimal() +
-      theme(axis.text.x = element_text(angle = 45, hjust = 1))
+      theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 12), 
+            axis.text.y = element_text(size = 12),
+            axis.title.x = element_text(size = 14),
+            axis.title.y = element_text(size = 14))
   })
   
   # Server logic for Stroke cases bar chart
@@ -400,11 +447,16 @@ server <- function(input, output) {
     colnames(year_counts)[2] <- "count"
     
     ggplot(year_counts, aes(x = as.factor(year), y = count)) +
-      geom_bar(stat = "identity", fill = "steelblue") +
+      geom_bar(stat = "identity", fill = "#08589e") +
+      geom_text(aes(label = count, y = count * 1.01), vjust = -0.5, size = 5) +
       labs(title = "Number of Eligible Stroke Cases by Year",
            x = "Year",
            y = "Number of Cases") +
-      theme_minimal()
+      theme_minimal() +
+      theme(axis.text.x = element_text(hjust = 1, size = 12), 
+            axis.text.y = element_text(size = 12),
+            axis.title.x = element_text(size = 14),
+            axis.title.y = element_text(size = 14))
   })
   
   # Server logic for Stroke deaths bar chart
@@ -420,10 +472,15 @@ server <- function(input, output) {
     
     ggplot(deaths_counts, aes(x = as.factor(year), y = count)) +
       geom_bar(stat = "identity", fill = "darkred") +
+      geom_text(aes(label = count, y = count * 1.01), vjust = -0.5, size = 5) +
       labs(title = "Number of Stroke Deaths by Year",
            x = "Year",
            y = "Number of Deaths") +
-      theme_minimal()
+      theme_minimal() +
+      theme(axis.text.x = element_text(hjust = 1, size = 12), 
+            axis.text.y = element_text(size = 12),
+            axis.title.x = element_text(size = 14),
+            axis.title.y = element_text(size = 14))
   })
   
   # Server logic for Stroke cases by month bar chart
@@ -440,12 +497,16 @@ server <- function(input, output) {
     df$month <- factor(df$edatemon, levels = 1:12, labels = month.name)
     
     ggplot(df, aes(x = month, y = count)) +
-      geom_bar(stat = "identity", fill = "steelblue") +
+      geom_bar(stat = "identity", fill = "#08589e") +
+      geom_text(aes(label = count, y = count * 1.01), vjust = -0.5, size = 5) +
       labs(title = "Stroke Cases by Month",
            x = "Month",
            y = "Frequency") +
       theme_minimal() +
-      theme(axis.text.x = element_text(angle = 45, hjust = 1))
+      theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 12), 
+            axis.text.y = element_text(size = 12),
+            axis.title.x = element_text(size = 14),
+            axis.title.y = element_text(size = 14))
   })
   
   # Server logic for Stroke deaths by month bar chart
@@ -463,11 +524,15 @@ server <- function(input, output) {
     
     ggplot(df, aes(x = month, y = count)) +
       geom_bar(stat = "identity", fill = "darkred") +
+      geom_text(aes(label = count, y = count * 1.01), vjust = -0.5, size = 5) +
       labs(title = "Stroke Deaths by Month",
            x = "Month",
            y = "Frequency") +
       theme_minimal() +
-      theme(axis.text.x = element_text(angle = 45, hjust = 1))
+      theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 12), 
+            axis.text.y = element_text(size = 12),
+            axis.title.x = element_text(size = 14),
+            axis.title.y = element_text(size = 14))
   })
   
   # Server logic for Stroke aspirin by month bar chart
@@ -484,12 +549,16 @@ server <- function(input, output) {
     df$month <- factor(df$edatemon, levels = 1:12, labels = month.name)
     
     ggplot(df, aes(x = month, y = count)) +
-      geom_bar(stat = "identity", fill = "green") +
+      geom_bar(stat = "identity", fill = "#238b45") +
+      geom_text(aes(label = count, y = count * 1.01), vjust = -0.5, size = 5) +
       labs(title = "Persons on Aspirin by Month",
            x = "Month",
            y = "Frequency") +
       theme_minimal() +
-      theme(axis.text.x = element_text(angle = 45, hjust = 1))
+      theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 12), 
+            axis.text.y = element_text(size = 12),
+            axis.title.x = element_text(size = 14),
+            axis.title.y = element_text(size = 14))
   })
   
   # Value box for total MI deaths
