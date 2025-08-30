@@ -1,3 +1,17 @@
+
+## HEADER -----------------------------------------------------
+##  R file METADATA
+##  algorithm name          ami_stroke_dashboard / app.R
+##  project:                BNR
+##  analysts:               Kern Rocke
+##  date first created      24-AUG-2025
+##  date last modified      30-AUG-2025
+##  algorithm task          Create AMI and Stroke Dashboard for Barbados CVD Registry
+##  status                  Completed
+##  objective               To have a dashboard for monitoring AMI and stroke registry data
+##  methods                 See additional information on dashboard. 
+
+#Required libraries
 library(shiny)
 library(shinydashboard)
 library(ggplot2)
